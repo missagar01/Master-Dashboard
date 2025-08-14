@@ -134,84 +134,96 @@ export default function MasterDashboard() {
   }
 
   // Fetch systems data based on user access
-  const fetchSystemsData = async (user: User) => {
-    try {
-      setLoading(true)
-      const response = await fetch(
-        "https://script.google.com/macros/s/AKfycbxp16KESUsNMtAmHbei7V4ckoTWMFtB1eJng_hsJF5SQ3Ao-MQeooiHNXCcVSYO-9KFTA/exec?sheet=All%20Systems",
-      )
-      const data = await response.json()
+ // Replace the fetchSystemsData function with this updated version
 
-      if (data.success && data.data) {
-        // Skip header row and map the data
-        let rows = data.data.slice(1).map((row: any[], index: number) => ({
-          sno: index + 1,
-          systemName: row[1] || "",
-          appLink: row[2] || "",
-          sheetLink: row[3] || "",
-          status: row[4] || "",
-          remarks: row[5] || "",
-        }))
+const fetchSystemsData = async (user: User) => {
+  try {
+    setLoading(true)
+    const response = await fetch(
+      "https://script.google.com/macros/s/AKfycbxp16KESUsNMtAmHbei7V4ckoTWMFtB1eJng_hsJF5SQ3Ao-MQeooiHNXCcVSYO-9KFTA/exec?sheet=All%20Systems",
+    )
+    const data = await response.json()
 
-        // Filter systems based on user access - FIXED LOGIC
-        if (user.userType === "user" && user.appAccess) {
-          console.log("User app access:", user.appAccess)
-          console.log(
-            "Available systems:",
-            rows.map((r) => r.systemName),
-          )
+    if (data.success && data.data) {
+      // Skip header row and map the data - REMOVE sno generation here
+      let rows = data.data.slice(1).map((row: any[]) => ({
+        systemName: row[1] || "",
+        appLink: row[2] || "",
+        sheetLink: row[3] || "",
+        status: row[4] || "",
+        remarks: row[5] || "",
+      }))
 
-          // Split the app access by comma and clean up whitespace
-          const accessibleApps = user.appAccess
-            .split(",")
-            .map((app) => app.trim().toLowerCase())
-            .filter((app) => app.length > 0) // Remove empty strings
+      // Filter systems based on user access - FIXED LOGIC
+      if (user.userType === "user" && user.appAccess) {
+        console.log("User app access:", user.appAccess)
+        console.log(
+          "Available systems:",
+          rows.map((r) => r.systemName),
+        )
 
-          console.log("Accessible apps:", accessibleApps)
+        // Split the app access by comma and clean up whitespace
+        const accessibleApps = user.appAccess
+          .split(",")
+          .map((app) => app.trim().toLowerCase())
+          .filter((app) => app.length > 0) // Remove empty strings
 
-          // Filter systems where system name matches any of the accessible apps
-          rows = rows.filter((system: System) => {
-            const systemNameLower = system.systemName.toLowerCase()
-            const isAccessible = accessibleApps.some((app) => {
-              // Check if the app name is contained in the system name or vice versa
-              return systemNameLower.includes(app) || app.includes(systemNameLower)
-            })
+        console.log("Accessible apps:", accessibleApps)
 
-            if (isAccessible) {
-              console.log(`System "${system.systemName}" is accessible`)
-            }
-
-            return isAccessible
+        // Filter systems where system name matches any of the accessible apps
+        rows = rows.filter((system: any) => {
+          const systemNameLower = system.systemName.toLowerCase()
+          const isAccessible = accessibleApps.some((app) => {
+            // Check if the app name is contained in the system name or vice versa
+            return systemNameLower.includes(app) || app.includes(systemNameLower)
           })
 
-          console.log(
-            "Filtered systems:",
-            rows.map((r) => r.systemName),
-          )
-        }
+          if (isAccessible) {
+            console.log(`System "${system.systemName}" is accessible`)
+          }
 
-        // Filter systems based on status
-        const completeSystems = rows.filter(
-          (system: System) => system.status === "Complete" || system.status === "Completed",
-        )
-        const runningSystems = rows.filter(
-          (system: System) => system.status === "Running" || system.status === "Pending",
-        )
-
-        console.log("Complete systems:", completeSystems.length)
-        console.log("Running systems:", runningSystems.length)
-
-        setSystemsData({
-          complete: completeSystems,
-          running: runningSystems,
+          return isAccessible
         })
+
+        console.log(
+          "Filtered systems:",
+          rows.map((r) => r.systemName),
+        )
       }
-    } catch (error) {
-      console.error("Error fetching data:", error)
-    } finally {
-      setLoading(false)
+
+      // Filter systems based on status
+      const completeSystems = rows.filter(
+        (system: any) => system.status === "Complete" || system.status === "Completed",
+      )
+      const runningSystems = rows.filter(
+        (system: any) => system.status === "Running" || system.status === "Pending",
+      )
+
+      // ADD SERIAL NUMBERS AFTER FILTERING - This ensures sequential numbering
+      const completeSystemsWithSno = completeSystems.map((system: any, index: number) => ({
+        ...system,
+        sno: index + 1, // Generate sequential serial numbers starting from 1
+      }))
+
+      const runningSystemsWithSno = runningSystems.map((system: any, index: number) => ({
+        ...system,
+        sno: index + 1, // Generate sequential serial numbers starting from 1
+      }))
+
+      console.log("Complete systems:", completeSystemsWithSno.length)
+      console.log("Running systems:", runningSystemsWithSno.length)
+
+      setSystemsData({
+        complete: completeSystemsWithSno,
+        running: runningSystemsWithSno,
+      })
     }
+  } catch (error) {
+    console.error("Error fetching data:", error)
+  } finally {
+    setLoading(false)
   }
+}
 
   const handleSectionClick = (section: "complete" | "running") => {
     // Only allow running section for admin users
