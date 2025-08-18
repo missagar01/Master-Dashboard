@@ -18,6 +18,7 @@ interface System {
   sheetLink: string
   status: "Complete" | "Running" | "Pending"
   remarks?: string
+  folderLink?: string
 }
 
 interface User {
@@ -134,96 +135,95 @@ export default function MasterDashboard() {
   }
 
   // Fetch systems data based on user access
- // Replace the fetchSystemsData function with this updated version
+  const fetchSystemsData = async (user: User) => {
+    try {
+      setLoading(true)
+      const response = await fetch(
+        "https://script.google.com/macros/s/AKfycbxp16KESUsNMtAmHbei7V4ckoTWMFtB1eJng_hsJF5SQ3Ao-MQeooiHNXCcVSYO-9KFTA/exec?sheet=All%20Systems",
+      )
+      const data = await response.json()
 
-const fetchSystemsData = async (user: User) => {
-  try {
-    setLoading(true)
-    const response = await fetch(
-      "https://script.google.com/macros/s/AKfycbxp16KESUsNMtAmHbei7V4ckoTWMFtB1eJng_hsJF5SQ3Ao-MQeooiHNXCcVSYO-9KFTA/exec?sheet=All%20Systems",
-    )
-    const data = await response.json()
+      if (data.success && data.data) {
+        // Skip header row and map the data - REMOVE sno generation here
+        let rows = data.data.slice(1).map((row: any[]) => ({
+          systemName: row[1] || "",
+          appLink: row[2] || "",
+          sheetLink: row[3] || "",
+          status: row[4] || "",
+          remarks: row[5] || "",
+          folderLink: row[6] || "",
+        }))
 
-    if (data.success && data.data) {
-      // Skip header row and map the data - REMOVE sno generation here
-      let rows = data.data.slice(1).map((row: any[]) => ({
-        systemName: row[1] || "",
-        appLink: row[2] || "",
-        sheetLink: row[3] || "",
-        status: row[4] || "",
-        remarks: row[5] || "",
-      }))
+        // Filter systems based on user access - FIXED LOGIC
+        if (user.userType === "user" && user.appAccess) {
+          console.log("User app access:", user.appAccess)
+          console.log(
+            "Available systems:",
+            rows.map((r) => r.systemName),
+          )
 
-      // Filter systems based on user access - FIXED LOGIC
-      if (user.userType === "user" && user.appAccess) {
-        console.log("User app access:", user.appAccess)
-        console.log(
-          "Available systems:",
-          rows.map((r) => r.systemName),
-        )
+          // Split the app access by comma and clean up whitespace
+          const accessibleApps = user.appAccess
+            .split(",")
+            .map((app) => app.trim().toLowerCase())
+            .filter((app) => app.length > 0) // Remove empty strings
 
-        // Split the app access by comma and clean up whitespace
-        const accessibleApps = user.appAccess
-          .split(",")
-          .map((app) => app.trim().toLowerCase())
-          .filter((app) => app.length > 0) // Remove empty strings
+          console.log("Accessible apps:", accessibleApps)
 
-        console.log("Accessible apps:", accessibleApps)
+          // Filter systems where system name matches any of the accessible apps
+          rows = rows.filter((system: any) => {
+            const systemNameLower = system.systemName.toLowerCase()
+            const isAccessible = accessibleApps.some((app) => {
+              // Check if the app name is contained in the system name or vice versa
+              return systemNameLower.includes(app) || app.includes(systemNameLower)
+            })
 
-        // Filter systems where system name matches any of the accessible apps
-        rows = rows.filter((system: any) => {
-          const systemNameLower = system.systemName.toLowerCase()
-          const isAccessible = accessibleApps.some((app) => {
-            // Check if the app name is contained in the system name or vice versa
-            return systemNameLower.includes(app) || app.includes(systemNameLower)
+            if (isAccessible) {
+              console.log(`System "${system.systemName}" is accessible`)
+            }
+
+            return isAccessible
           })
 
-          if (isAccessible) {
-            console.log(`System "${system.systemName}" is accessible`)
-          }
+          console.log(
+            "Filtered systems:",
+            rows.map((r) => r.systemName),
+          )
+        }
 
-          return isAccessible
-        })
-
-        console.log(
-          "Filtered systems:",
-          rows.map((r) => r.systemName),
+        // Filter systems based on status
+        const completeSystems = rows.filter(
+          (system: any) => system.status === "Complete" || system.status === "Completed",
         )
+        const runningSystems = rows.filter(
+          (system: any) => system.status === "Running" || system.status === "Pending",
+        )
+
+        // ADD SERIAL NUMBERS AFTER FILTERING - This ensures sequential numbering
+        const completeSystemsWithSno = completeSystems.map((system: any, index: number) => ({
+          ...system,
+          sno: index + 1, // Generate sequential serial numbers starting from 1
+        }))
+
+        const runningSystemsWithSno = runningSystems.map((system: any, index: number) => ({
+          ...system,
+          sno: index + 1, // Generate sequential serial numbers starting from 1
+        }))
+
+        console.log("Complete systems:", completeSystemsWithSno.length)
+        console.log("Running systems:", runningSystemsWithSno.length)
+
+        setSystemsData({
+          complete: completeSystemsWithSno,
+          running: runningSystemsWithSno,
+        })
       }
-
-      // Filter systems based on status
-      const completeSystems = rows.filter(
-        (system: any) => system.status === "Complete" || system.status === "Completed",
-      )
-      const runningSystems = rows.filter(
-        (system: any) => system.status === "Running" || system.status === "Pending",
-      )
-
-      // ADD SERIAL NUMBERS AFTER FILTERING - This ensures sequential numbering
-      const completeSystemsWithSno = completeSystems.map((system: any, index: number) => ({
-        ...system,
-        sno: index + 1, // Generate sequential serial numbers starting from 1
-      }))
-
-      const runningSystemsWithSno = runningSystems.map((system: any, index: number) => ({
-        ...system,
-        sno: index + 1, // Generate sequential serial numbers starting from 1
-      }))
-
-      console.log("Complete systems:", completeSystemsWithSno.length)
-      console.log("Running systems:", runningSystemsWithSno.length)
-
-      setSystemsData({
-        complete: completeSystemsWithSno,
-        running: runningSystemsWithSno,
-      })
+    } catch (error) {
+      console.error("Error fetching data:", error)
+    } finally {
+      setLoading(false)
     }
-  } catch (error) {
-    console.error("Error fetching data:", error)
-  } finally {
-    setLoading(false)
   }
-}
 
   const handleSectionClick = (section: "complete" | "running") => {
     // Only allow running section for admin users
@@ -572,7 +572,12 @@ const fetchSystemsData = async (user: User) => {
                                 Sheet Link
                               </TableHead>
                             )}
-                            {isRunning && (
+                            {currentUser?.userType === "admin" && section === "complete" && (
+                              <TableHead className="font-bold text-gray-800 min-w-[140px] sm:min-w-[180px] text-sm sm:text-base px-2 sm:px-4">
+                                Folder Link
+                              </TableHead>
+                            )}
+                            {currentUser?.userType === "admin" && (
                               <TableHead className="font-bold text-gray-800 min-w-[250px] sm:min-w-[300px] text-sm sm:text-base px-2 sm:px-4">
                                 Remarks
                               </TableHead>
@@ -599,52 +604,88 @@ const fetchSystemsData = async (user: User) => {
                                 </div>
                               </TableCell>
                               <TableCell className="px-2 sm:px-4 py-3 sm:py-4">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  asChild
-                                  className="bg-blue-50 hover:bg-blue-100 border-blue-300 text-blue-700 font-medium shadow-sm hover:shadow-md transition-all duration-300 text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-2 w-full sm:w-auto"
-                                >
-                                  <a
-                                    href={system.appLink}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center justify-center space-x-1 sm:space-x-2 min-w-[100px] sm:min-w-[120px]"
-                                  >
-                                    <FileText className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-                                    <span className="hidden sm:inline">Open App</span>
-                                    <span className="sm:hidden">App</span>
-                                    <ExternalLink className="h-2 w-2 sm:h-3 sm:w-3 flex-shrink-0" />
-                                  </a>
-                                </Button>
-                              </TableCell>
-                              {currentUser?.userType !== "user" && (
-                                <TableCell className="px-2 sm:px-4 py-3 sm:py-4">
+                                {system.appLink && system.appLink.trim() !== "" ? (
                                   <Button
                                     size="sm"
                                     variant="outline"
                                     asChild
-                                    className="bg-green-50 hover:bg-green-100 border-green-300 text-green-700 font-medium shadow-sm hover:shadow-md transition-all duration-300 text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-2 w-full sm:w-auto"
+                                    className="bg-blue-50 hover:bg-blue-100 border-blue-300 text-blue-700 font-medium shadow-sm hover:shadow-md transition-all duration-300 text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-2 w-full sm:w-auto"
                                   >
                                     <a
-                                      href={system.sheetLink}
+                                      href={system.appLink}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="flex items-center justify-center space-x-1 sm:space-x-2 min-w-[100px] sm:min-w-[120px]"
                                     >
-                                      <Sheet className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-                                      <span className="hidden sm:inline">View Sheet</span>
-                                      <span className="sm:hidden">Sheet</span>
+                                      <FileText className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                                      <span className="hidden sm:inline">Open App</span>
+                                      <span className="sm:hidden">App</span>
                                       <ExternalLink className="h-2 w-2 sm:h-3 sm:w-3 flex-shrink-0" />
                                     </a>
                                   </Button>
+                                ) : (
+                                  <span className="text-gray-400 text-xs sm:text-sm italic">No app link</span>
+                                )}
+                              </TableCell>
+                              {currentUser?.userType !== "user" && (
+                                <TableCell className="px-2 sm:px-4 py-3 sm:py-4">
+                                  {system.sheetLink && system.sheetLink.trim() !== "" ? (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      asChild
+                                      className="bg-green-50 hover:bg-green-100 border-green-300 text-green-700 font-medium shadow-sm hover:shadow-md transition-all duration-300 text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-2 w-full sm:w-auto"
+                                    >
+                                      <a
+                                        href={system.sheetLink}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center justify-center space-x-1 sm:space-x-2 min-w-[100px] sm:min-w-[120px]"
+                                      >
+                                        <Sheet className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                                        <span className="hidden sm:inline">View Sheet</span>
+                                        <span className="sm:hidden">Sheet</span>
+                                        <ExternalLink className="h-2 w-2 sm:h-3 sm:w-3 flex-shrink-0" />
+                                      </a>
+                                    </Button>
+                                  ) : (
+                                    <span className="text-gray-400 text-xs sm:text-sm italic">No sheet link</span>
+                                  )}
                                 </TableCell>
                               )}
-                              {isRunning && (
+                              {currentUser?.userType === "admin" && section === "complete" && (
+                                <TableCell className="px-2 sm:px-4 py-3 sm:py-4">
+                                  {system.folderLink && system.folderLink.trim() !== "" ? (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      asChild
+                                      className="bg-purple-50 hover:bg-purple-100 border-purple-300 text-purple-700 font-medium shadow-sm hover:shadow-md transition-all duration-300 text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-2 w-full sm:w-auto"
+                                    >
+                                      <a
+                                        href={system.folderLink}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center justify-center space-x-1 sm:space-x-2 min-w-[100px] sm:min-w-[120px]"
+                                      >
+                                        <svg className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                                          <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>
+                                        </svg>
+                                        <span className="hidden sm:inline">Open Folder</span>
+                                        <span className="sm:hidden">Folder</span>
+                                        <ExternalLink className="h-2 w-2 sm:h-3 sm:w-3 flex-shrink-0" />
+                                      </a>
+                                    </Button>
+                                  ) : (
+                                    <span className="text-gray-400 text-xs sm:text-sm italic">No folder link</span>
+                                  )}
+                                </TableCell>
+                              )}
+                              {currentUser?.userType === "admin" && (
                                 <TableCell className="px-2 sm:px-4 py-3 sm:py-4">
                                   <div className="max-w-[300px] sm:max-w-[350px] bg-white/50 rounded-lg p-2 sm:p-3 border border-white/30">
                                     <p className="text-xs sm:text-sm text-gray-700 leading-relaxed font-medium break-words">
-                                      {system.remarks}
+                                      {system.remarks || 'No remarks available'}
                                     </p>
                                   </div>
                                 </TableCell>
